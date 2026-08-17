@@ -56,16 +56,34 @@ pub fn run() {
 
 /// Background task: start mDNS advertising + browsing, and TCP/UDP listeners.
 async fn start_discovery_and_server(handle: tauri::AppHandle) {
+    // Write to a log file so we can debug remotely
+    let log_path = std::env::temp_dir().join("mac2win.log");
+    let mut log = std::fs::File::create(&log_path).ok();
+    macro_rules! logln {
+        ($($arg:tt)*) => {
+            if let Some(ref mut f) = log {
+                use std::io::Write;
+                let _ = writeln!(f, "[{}] {}", chrono_str(), format!($($arg)*));
+            }
+        };
+    }
+    fn chrono_str() -> String {
+        format!("{:?}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+    }
+
+    logln!("=== Mac2Win discovery thread started ===");
+
     // Get local IP
     let local_ip = discovery::get_local_ip().unwrap_or_else(|| {
         "127.0.0.1".parse().unwrap()
     });
-    info!("Local IP: {}", local_ip);
+    logln!("Local IP: {}", local_ip);
 
     // Build our peer info
     let hostname = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_else(|_| "unknown".to_string());
+    logln!("Hostname: {}", hostname);
 
     let local_peer = PeerInfo {
         hostname: hostname.clone(),
@@ -83,40 +101,50 @@ async fn start_discovery_and_server(handle: tauri::AppHandle) {
 
     // Start mDNS discovery
     let mut disc_rx = None;
+    logln!("Starting mDNS discovery...");
     match discovery::NetworkDiscovery::new(local_peer.clone(), local_ip) {
         Ok(disc) => {
-            if let Err(e) = disc.start().await {
-                error!("mDNS discovery failed to start: {}", e);
-            } else {
-                info!("mDNS discovery started");
-                disc_rx = Some(disc.subscribe());
+            logln!("NetworkDiscovery created successfully");
+            match disc.start().await {
+                Ok(()) => {
+                    logln!("mDNS discovery started OK");
+                    disc_rx = Some(disc.subscribe());
+                }
+                Err(e) => {
+                    logln!("mDNS discovery FAILED to start: {}", e);
+                }
             }
         }
         Err(e) => {
-            error!("Failed to create mDNS discovery: {}", e);
+            logln!("Failed to create NetworkDiscovery: {}", e);
         }
     }
 
     // Start TCP/UDP listener
+    logln!("Starting TCP/UDP listener...");
     match connection::ConnectionManager::new().await {
         Ok(mut conn_mgr) => {
-            if let Err(e) = conn_mgr.start_listening().await {
-                error!("Connection listener failed: {}", e);
-            } else {
-                info!("Connection listener started on TCP {}", protocol::CONTROL_PORT);
+            match conn_mgr.start_listening().await {
+                Ok(()) => {
+                    logln!("Connection listener started on TCP {}", protocol::CONTROL_PORT);
+                }
+                Err(e) => {
+                    logln!("Connection listener FAILED: {}", e);
+                }
             }
         }
         Err(e) => {
-            error!("Failed to create connection manager: {}", e);
+            logln!("Failed to create ConnectionManager: {}", e);
         }
     }
 
     // Listen for peer discovery events and emit to frontend
+    logln!("Starting event loop, disc_rx is some: {}", disc_rx.is_some());
     if let Some(mut rx) = disc_rx {
         while let Ok(event) = rx.recv().await {
             match event {
                 discovery::DiscoveryEvent::PeerFound { id, info, addr } => {
-                    info!("Discovered peer: {} at {}", info.hostname, addr);
+                    logln!("PEER FOUND: {} at {}", info.hostname, addr);
                     let _ = handle.emit("peer-found", serde_json::json!({
                         "id": id,
                         "hostname": info.hostname,
@@ -125,14 +153,21 @@ async fn start_discovery_and_server(handle: tauri::AppHandle) {
                     }));
                 }
                 discovery::DiscoveryEvent::PeerLost { id } => {
-                    info!("Peer lost: {}", id);
+                    logln!("PEER LOST: {}", id);
                     let _ = handle.emit("peer-lost", serde_json::json!({
                         "id": id,
                     }));
                 }
             }
         }
+    } else {
+        logln!("No disc_rx - discovery not started, waiting forever");
+        // Keep the thread alive even if discovery failed
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        }
     }
+    logln!("Discovery thread exiting");
 }
 
 // ── Tauri Commands ──────────────────────────────────────────────────
