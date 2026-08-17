@@ -1,5 +1,5 @@
 use crate::protocol::*;
-use log::{debug, error, info, warn};
+use log::{info, warn};
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -103,6 +103,8 @@ impl NetworkDiscovery {
                                 control_port: info.get_port(),
                                 video_port: crate::protocol::VIDEO_PORT,
                                 input_port: crate::protocol::INPUT_PORT,
+                                clipboard_port: crate::protocol::CLIPBOARD_PORT,
+                                audio_port: crate::protocol::AUDIO_PORT,
                             };
 
                             info!("Discovered peer: {} ({:?}) at {}", peer.hostname, peer.os, addr);
@@ -114,8 +116,8 @@ impl NetworkDiscovery {
                             });
                         }
                     }
-                    mdns_sd::ServiceEvent::ServiceRemoved(info) => {
-                        let id = info.get_fullname().to_string();
+                    mdns_sd::ServiceEvent::ServiceRemoved(fullname, _service_type) => {
+                        let id = fullname;
                         peers.write().await.remove(&id);
                         warn!("Peer lost: {}", id);
                         let _ = tx.send(DiscoveryEvent::PeerLost { id });
@@ -145,7 +147,7 @@ impl NetworkDiscovery {
 
     /// Stop advertising and browsing.
     pub fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.mdns.unregister(&self.service_info)?;
+        self.mdns.unregister(self.service_info.get_fullname())?;
         self.mdns.shutdown()?;
         Ok(())
     }

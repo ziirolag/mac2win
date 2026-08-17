@@ -24,13 +24,20 @@ log = "0.4"
 env_logger = "0.11"
 mdns-sd = "0.11"
 
-# Video frame encoding
+# Cross-platform clipboard
+arboard = "3"
+
+# Cross-platform audio I/O
+cpal = "0.15"
+
+# Image encoding (clipboard images)
 image = "0.25"
 
 # HMAC for authentication
 hmac = "0.12"
 sha2 = "0.10"
 
+# Platform-specific screen capture / input (used by capture/display/input modules)
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
@@ -42,17 +49,12 @@ windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
-    "Win32_Media_Audio",
-    "Win32_Media_Audio_Endpoints",
-    "Win32_System_Com",
-    "Win32_System_Ole",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
 core-graphics = "0.24"
 objc = "0.2"
-dispatch = "0.2"
 
 [features]
 default = ["custom-protocol"]

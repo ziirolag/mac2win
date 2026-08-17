@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicholasgasior/tauri-v2-schemas/main/schemas/tauri-v2.schema.json",
   "productName": "Mac2Win",
   "version": "0.1.0",
   "identifier": "com.mac2win.app",
@@ -10,7 +9,6 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "title": "Mac2Win - Extended Display",
     "windows": [
       {
         "title": "Mac2Win",

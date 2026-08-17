@@ -1,5 +1,5 @@
 use crate::protocol::*;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -88,7 +88,6 @@ impl ConnectionManager {
             }
         });
 
-        self.control_listener = Some(listener);
         Ok(())
     }
 
@@ -99,12 +98,10 @@ impl ConnectionManager {
         local_peer: PeerInfo,
         auth_token: [u8; 32],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let stream = TcpStream::connect(addr).await?;
+        let mut stream = TcpStream::connect(addr).await?;
         let peer_addr = addr;
 
         info!("Connected to peer at {}", peer_addr);
-
-        let event_tx = self.event_tx.clone();
 
         // Send handshake
         let handshake = ControlMessage::Handshake {
@@ -115,14 +112,13 @@ impl ConnectionManager {
         let handshake_bytes = bincode::serialize(&handshake)?;
         let len = (handshake_bytes.len() as u32).to_le_bytes();
 
-        let mut stream_clone = stream.clone();
-        stream_clone.write_all(&len).await?;
-        stream_clone.write_all(&handshake_bytes).await?;
+        stream.write_all(&len).await?;
+        stream.write_all(&handshake_bytes).await?;
 
         // Handle incoming messages
-        let tx = event_tx.clone();
+        let event_tx = self.event_tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, peer_addr, tx, 
+            if let Err(e) = handle_connection(stream, peer_addr, event_tx, 
                 Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap()),
                 Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap())
             ).await {

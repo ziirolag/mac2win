@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 
 /// Protocol version for backward compatibility
 pub const PROTOCOL_VERSION: u32 = 1;
